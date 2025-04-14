@@ -31,7 +31,7 @@ class FrankaCubeLiftEnvCfg(joint_pos_def_env_cfg.FrankaCubeLiftEnvCfg):
         self.scene.robot.spawn.rigid_props.disable_gravity = True
 
         # If closed-loop contact force control is desired, contact sensors should be enabled for the robot
-        # self.scene.robot.spawn.activate_contact_sensors = True
+        self.scene.robot.spawn.activate_contact_sensors = False
 
         self.actions.arm_action = OperationalSpaceControllerActionCfg(
             asset_name="robot",
@@ -41,21 +41,23 @@ class FrankaCubeLiftEnvCfg(joint_pos_def_env_cfg.FrankaCubeLiftEnvCfg):
             # can be added to the scene and its relative path could provided as task_frame_rel_path
             # task_frame_rel_path="task_frame",
             controller_cfg=OperationalSpaceControllerCfg(
-                target_types=["pose_abs"],
+                target_types=["pose_rel"],
                 impedance_mode="variable",
                 inertial_dynamics_decoupling=True,
                 partial_inertial_dynamics_decoupling=False,
                 gravity_compensation=False,
-                motion_stiffness_task=100.0,
-                motion_damping_ratio_task=1.0,
-                motion_stiffness_limits_task=(50.0, 200.0),
+                motion_stiffness_task=20.0, # 50.0
+                motion_damping_ratio_task=1.5, # 1.0
+                motion_stiffness_limits_task=(50.0, 100.0),
+                # motion_stiffness_limits_task=(5.0, 50.0),
                 nullspace_control="position",
             ),
             nullspace_joint_pos_target="center",
-            position_scale=1.0,
-            orientation_scale=1.0,
-            stiffness_scale=100.0,
+            position_scale=0.7, # 1.0
+            orientation_scale=0.7,# 0.5
+            stiffness_scale=10.0, # 50
         )
+        
         # Removing these observations as they are not needed for OSC and we want keep the observation space small
         self.observations.policy.joint_pos = None
         self.observations.policy.joint_vel = None
