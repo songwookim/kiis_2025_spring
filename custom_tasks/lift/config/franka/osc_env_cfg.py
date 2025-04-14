@@ -16,7 +16,7 @@ from isaaclab_assets.robots.franka import FRANKA_PANDA_CFG  # isort: skip
 
 
 @configclass
-class FrankaReachEnvCfg(joint_pos_def_env_cfg.FrankaCubeLiftEnvCfg):
+class FrankaCubeLiftEnvCfg(joint_pos_def_env_cfg.FrankaCubeLiftEnvCfg):
     def __post_init__(self):
         # post init of parent
         super().__post_init__()
@@ -61,10 +61,8 @@ class FrankaReachEnvCfg(joint_pos_def_env_cfg.FrankaCubeLiftEnvCfg):
         self.observations.policy.joint_vel = None
 
 
-        scene
-
 @configclass
-class FrankaReachEnvCfg_PLAY(FrankaReachEnvCfg):
+class FrankaReachEnvCfg_PLAY(joint_pos_def_env_cfg.FrankaCubeLiftEnvCfg):
     def __post_init__(self):
         # post init of parent
         super().__post_init__()

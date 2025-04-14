@@ -46,26 +46,52 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
         # Set the body name for the end effector
         self.commands.object_pose.body_name = "panda_hand"
 
-        # Set Cube as object
+        # # Set Cube as object
+        # self.scene.object = DeformableObjectCfg(
+        #     prim_path="{ENV_REGEX_NS}/Object",
+        #     init_state=DeformableObjectCfg.InitialStateCfg(pos=[0.5, 0, 0.055], rot=[1, 0, 0, 0]), # type: ignore            
+        #     spawn=sim_utils.MeshCuboidCfg(
+        #         size=(0.04, 0.04, 0.04),
+        #         deformable_props=DeformableBodyPropertiesCfg(rest_offset=0.0,contact_offset=0.001),
+        #         physics_material=sim_utils.DeformableBodyMaterialCfg(poissons_ratio=0.4, youngs_modulus=1e5),
+        #         # physics_material=sim_utils.DeformableBodyMaterialCfg(poissons_ratio=0.4, youngs_modulus=5000, elasticity_damping=0.005),
+        #         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.5, 0.1, 0.0)),
+        #         mass_props=sim_utils.MassPropertiesCfg(
+        #             mass=0.1,
+        #         ),
+        #     )
+        #     # spawn=UsdFileCfg( # Teddy Bear
+        #     #     usd_path=f"{ISAACLAB_NUCLEUS_DIR}/Objects/Teddy_Bear/teddy_bear.usd",
+        #     #     scale=(0.005, 0.005, 0.005),
+        #     # ),
+        # )
         self.scene.object = DeformableObjectCfg(
             prim_path="{ENV_REGEX_NS}/Object",
             init_state=DeformableObjectCfg.InitialStateCfg(pos=[0.5, 0, 0.055], rot=[1, 0, 0, 0]), # type: ignore            
+            debug_vis=True,
             spawn=sim_utils.MeshCuboidCfg(
-                size=(0.04, 0.04, 0.04),
-                deformable_props=DeformableBodyPropertiesCfg(rest_offset=0.0,contact_offset=0.001),
-                physics_material=sim_utils.DeformableBodyMaterialCfg(poissons_ratio=0.4, youngs_modulus=1e5),
-                # physics_material=sim_utils.DeformableBodyMaterialCfg(poissons_ratio=0.4, youngs_modulus=5000, elasticity_damping=0.005),
+                size=(0.055, 0.055, 0.055),
+                deformable_props=DeformableBodyPropertiesCfg(
+                    rest_offset=0.0,
+                    contact_offset=0.001,
+                    vertex_velocity_damping = 0.1,
+                    solver_position_iteration_count= 50,
+                    collision_simplification=True,
+                    collision_simplification_target_triangle_count=512,  # 삼각형 수 감소 (기본값: 0)
+                    simulation_hexahedral_resolution=8,                   # 시뮬레이션 해상도 낮춤
+                    ),
+                physics_material=sim_utils.DeformableBodyMaterialCfg(
+                    poissons_ratio=0.4, 
+                    # youngs_modulus=1e5, 
+                    youngs_modulus=1.5e6, 
+                    dynamic_friction=10.
+                ),
                 visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.5, 0.1, 0.0)),
                 mass_props=sim_utils.MassPropertiesCfg(
-                    mass=0.1,
+                    mass=0.5,
                 ),
             )
-            # spawn=UsdFileCfg( # Teddy Bear
-            #     usd_path=f"{ISAACLAB_NUCLEUS_DIR}/Objects/Teddy_Bear/teddy_bear.usd",
-            #     scale=(0.005, 0.005, 0.005),
-            # ),
         )
-
         self.scene.replicate_physics = False
          
         # Listens to the required transforms
