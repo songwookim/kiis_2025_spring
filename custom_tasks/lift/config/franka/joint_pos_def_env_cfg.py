@@ -67,7 +67,7 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
         # )
         self.scene.object = DeformableObjectCfg(
             prim_path="{ENV_REGEX_NS}/Object",
-            init_state=DeformableObjectCfg.InitialStateCfg(pos=[0.5, 0, 0.055], rot=[1, 0, 0, 0]), # type: ignore            
+        init_state=DeformableObjectCfg.InitialStateCfg(pos=[0.5, 0, 0.055], rot=[1, 0, 0, 0]), # type: ignore            
             debug_vis=True,
             spawn=sim_utils.MeshCuboidCfg(
                 size=(0.055, 0.055, 0.055),

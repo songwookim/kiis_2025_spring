@@ -29,7 +29,7 @@ class FrankaCubeLiftEnvCfg(joint_pos_def_env_cfg.FrankaCubeLiftEnvCfg):
         self.scene.robot.actuators["panda_forearm"].stiffness = 0.0
         self.scene.robot.actuators["panda_forearm"].damping = 0.0
         self.scene.robot.spawn.rigid_props.disable_gravity = True
-
+        
         # If closed-loop contact force control is desired, contact sensors should be enabled for the robot
         self.scene.robot.spawn.activate_contact_sensors = False
 
@@ -41,21 +41,23 @@ class FrankaCubeLiftEnvCfg(joint_pos_def_env_cfg.FrankaCubeLiftEnvCfg):
             # can be added to the scene and its relative path could provided as task_frame_rel_path
             # task_frame_rel_path="task_frame",
             controller_cfg=OperationalSpaceControllerCfg(
-                target_types=["pose_rel"],
-                impedance_mode="variable",
+                target_types=["pose_abs"],
+                impedance_mode="variable_kp",
                 inertial_dynamics_decoupling=True,
-                partial_inertial_dynamics_decoupling=False,
+                partial_inertial_dynamics_decoupling=True,
                 gravity_compensation=False,
-                motion_stiffness_task=20.0, # 50.0
+                motion_stiffness_task=50.0, # 50.0
                 motion_damping_ratio_task=1.5, # 1.0
-                motion_stiffness_limits_task=(50.0, 100.0),
+                motion_stiffness_limits_task=(50.0, 200.0),
                 # motion_stiffness_limits_task=(5.0, 50.0),
                 nullspace_control="position",
+                
             ),
             nullspace_joint_pos_target="center",
-            position_scale=0.7, # 1.0
-            orientation_scale=0.7,# 0.5
-            stiffness_scale=10.0, # 50
+            position_scale=2, # 1.0
+            orientation_scale=0.1,# 0.5
+            stiffness_scale=50.0, # 50
+            damping_ratio_scale=0.5, # 1.0
         )
         
         # Removing these observations as they are not needed for OSC and we want keep the observation space small

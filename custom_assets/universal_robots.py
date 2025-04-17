@@ -16,7 +16,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg, IdealPDActuatorCfg
 from isaaclab.assets.articulation import ArticulationCfg
 from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
-from work_dir.custom_utils.assets import WORK_DIR
+from custom_utils.assets import WORK_DIR
 ##
 # Configuration
 ##
@@ -69,7 +69,7 @@ UR10_DCLAW_E_CFG = ArticulationCfg(
 
 UR10_DCLAW_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
-        usd_path=f"{WORK_DIR}/custom_assets/Robots/ur5e_dclaw_instanceable.usd",
+        usd_path=f"{WORK_DIR}/custom_assets/Robots/ur5e_dclaw_instanceable_ver3.usd",
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
             max_depenetration_velocity=5.0,
@@ -87,12 +87,12 @@ UR10_DCLAW_CFG = ArticulationCfg(
             "joint_f1_0": 0.0,
             "joint_f2_0": 0.0,
             "joint_f3_0": 0.0,
-            "joint_f1_1": -0.5233,
-            "joint_f2_1": -0.5233,
-            "joint_f3_1": -0.5233,
-            "joint_f1_2": 0.3488,
-            "joint_f2_2": 0.3488,
-            "joint_f3_2": 0.3488,
+            "joint_f1_1": -0.0,
+            "joint_f2_1": -0.0,
+            "joint_f3_1": -0.0,
+            "joint_f1_2": 0.0,
+            "joint_f2_2": 0.0,
+            "joint_f3_2": 0.0,
         },
     ),
     actuators={
@@ -103,12 +103,12 @@ UR10_DCLAW_CFG = ArticulationCfg(
             stiffness=800.0,
             damping=40.0,
         ),
-        "gripper": IdealPDActuatorCfg(
+        "gripper": ImplicitActuatorCfg(
             joint_names_expr=["joint_f.*"],
             velocity_limit=100.0,
-            effort_limit=87.0,
-            stiffness=800.0,
-            damping=40.0,
+            effort_limit=0.1,
+            stiffness=0.0,
+            damping=0.0,
         ),
     },
 )
