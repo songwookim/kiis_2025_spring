@@ -21,6 +21,7 @@ from isaaclab.sensors.frame_transformer.frame_transformer_cfg import FrameTransf
 from isaaclab.sim.spawners.from_files.from_files_cfg import GroundPlaneCfg, UsdFileCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+from work_dir.custom_tasks.lift.mdp.actions.actions_cfg import JointImpedanceActionCfg
 
 from . import mdp
 
@@ -77,7 +78,7 @@ class CommandsCfg:
         asset_name="robot",
         body_name=MISSING,  # will be set by agent env cfg
         resampling_time_range=(5.0, 5.0),
-        debug_vis=True,
+        debug_vis=False,
         ranges=mdp.UniformPoseCommandCfg.Ranges(
             pos_x=(0.4, 0.6), pos_y=(-0.25, 0.25), pos_z=(0.25, 0.5), roll=(0.0, 0.0), pitch=(0.0, 0.0), yaw=(0.0, 0.0)
         ),
@@ -90,7 +91,7 @@ class ActionsCfg:
 
     # will be set by agent env cfg
     arm_action: mdp.JointPositionActionCfg | mdp.DifferentialInverseKinematicsActionCfg = MISSING
-    gripper_action = MISSING # type: ignore
+    gripper_action: mdp.JointPositionActionCfg | JointImpedanceActionCfg = MISSING # type: ignore
 
 
 @configclass
@@ -120,16 +121,25 @@ class EventCfg:
     """Configuration for events."""
 
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
+    # reset_all = EventTerm(
+    #     func=mdp.reset_deformable_object_properties, 
+    #     mode="reset"
+    #     params={
+    #         "young_modulus": [1.5e6, 9e3],,
+    #         "asset_cfg": SceneEntityCfg("object"),
+    #         }
+    #     )
     
-    reset_object_position = EventTerm(
-        func=mdp.reset_nodal_state_uniform,
-        mode="reset",
-        params={
-            "position_range": {"x": (-0.1, 0.1), "y": (-0.25, 0.25), "z": (0.0, 0.0)},
-            "velocity_range": {},
-            "asset_cfg": SceneEntityCfg("object"),
-        },
-    )
+    
+    # reset_object_position = EventTerm(
+    #     func=mdp.reset_nodal_state_uniform,
+    #     mode="reset",
+    #     params={
+    #         "position_range": {"x": (-0.1, 0.1), "y": (-0.25, 0.25), "z": (0.0, 0.0)},
+    #         "velocity_range": {},
+    #         "asset_cfg": SceneEntityCfg("object"),
+    #     },
+    # )
 
 
 @configclass

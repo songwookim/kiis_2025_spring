@@ -13,41 +13,52 @@ from scipy.spatial.transform import Rotation
 import carb
 import omni
 
-from ..device_base import DeviceBase
+from abc import ABC, abstractmethod
+from collections.abc import Callable
+from typing import Any
+
+
+class DeviceBase(ABC):
+    def __init__(self):
+        """Initialize the teleoperation interface."""
+        pass
+
+    def __str__(self) -> str:
+        """Returns: A string containing the information of joystick."""
+        return f"{self.__class__.__name__}"
+
+    """
+    Operations
+    """
+
+    @abstractmethod
+    def reset(self):
+        """Reset the internals."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def add_callback(self, key: Any, func: Callable):
+        """Add additional functions to bind keyboard.
+
+        Args:
+            key: The button to check against.
+            func: The function to call when key is pressed. The callback function should not
+                take any arguments.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def advance(self) -> Any:
+        """Provides the joystick event state.
+
+        Returns:
+            The processed output form the joystick.
+        """
+        raise NotImplementedError
 
 
 class Se3Keyboard(DeviceBase):
-    """A keyboard controller for sending SE(3) commands as delta poses and binary command (open/close).
-
-    This class is designed to provide a keyboard controller for a robotic arm with a gripper.
-    It uses the Omniverse keyboard interface to listen to keyboard events and map them to robot's
-    task-space commands.
-
-    The command comprises of two parts:
-
-    * delta pose: a 6D vector of (x, y, z, roll, pitch, yaw) in meters and radians.
-    * gripper: a binary command to open or close the gripper.
-
-    Key bindings:
-        ============================== ================= =================
-        Description                    Key (+ve axis)    Key (-ve axis)
-        ============================== ================= =================
-        Toggle gripper (open/close)    K
-        Move along x-axis              W                 S
-        Move along y-axis              A                 D
-        Move along z-axis              Q                 E
-        Rotate along x-axis            Z                 X
-        Rotate along y-axis            T                 G
-        Rotate along z-axis            C                 V
-        ============================== ================= =================
-
-    .. seealso::
-
-        The official documentation for the keyboard interface: `Carb Keyboard Interface <https://docs.omniverse.nvidia.com/dev-guide/latest/programmer_ref/input-devices/keyboard.html>`__.
-
-    """
-
-    def __init__(self, pos_sensitivity: float = 0.4, rot_sensitivity: float = 0.8):
+    def __init__(self, pos_sensitivity: float = 0.4, rot_sensitivity: float = 0.8, gripper_sensitivity: float = 0.01):
         """Initialize the keyboard layer.
 
         Args:
@@ -57,6 +68,8 @@ class Se3Keyboard(DeviceBase):
         # store inputs
         self.pos_sensitivity = pos_sensitivity
         self.rot_sensitivity = rot_sensitivity
+        self.gripper_sensitivity = gripper_sensitivity 
+        
         # acquire omniverse interfaces
         self._appwindow = omni.appwindow.get_default_app_window()
         self._input = carb.input.acquire_input_interface()
@@ -69,9 +82,9 @@ class Se3Keyboard(DeviceBase):
         # bindings for keyboard to command
         self._create_key_bindings()
         # command buffers
-        self._close_gripper = False
         self._delta_pos = np.zeros(3)  # (x, y, z)
         self._delta_rot = np.zeros(3)  # (roll, pitch, yaw)
+        self._delta_gripper = np.zeros(1)  # (open, close)
         # dictionary for additional callbacks
         self._additional_callbacks = dict()
 
@@ -85,7 +98,8 @@ class Se3Keyboard(DeviceBase):
         msg = f"Keyboard Controller for SE(3): {self.__class__.__name__}\n"
         msg += f"\tKeyboard name: {self._input.get_keyboard_name(self._keyboard)}\n"
         msg += "\t----------------------------------------------\n"
-        msg += "\tToggle gripper (open/close): K\n"
+        msg += "\t gripper (open/close): J/K\n"
+        # msg += "\t gripper2 (open/close): J\n"
         msg += "\tMove arm along x-axis: W/S\n"
         msg += "\tMove arm along y-axis: A/D\n"
         msg += "\tMove arm along z-axis: Q/E\n"
@@ -100,7 +114,8 @@ class Se3Keyboard(DeviceBase):
 
     def reset(self):
         # default flags
-        self._close_gripper = False
+        # self._close_gripper = False
+        self._delta_gripper = np.zeros(1)  # (open, close)
         self._delta_pos = np.zeros(3)  # (x, y, z)
         self._delta_rot = np.zeros(3)  # (roll, pitch, yaw)
 
@@ -126,30 +141,29 @@ class Se3Keyboard(DeviceBase):
         # convert to rotation vector
         rot_vec = Rotation.from_euler("XYZ", self._delta_rot).as_rotvec()
         # return the command and gripper state
-        return np.concatenate([self._delta_pos, rot_vec]), self._close_gripper
+        return np.concatenate([self._delta_pos, rot_vec]), self._delta_gripper
 
     """
     Internal helpers.
     """
 
     def _on_keyboard_event(self, event, *args, **kwargs):
-        """Subscriber callback to when kit is updated.
-
-        Reference:
-            https://docs.omniverse.nvidia.com/dev-guide/latest/programmer_ref/input-devices/keyboard.html
-        """
         # apply the command when pressed
         if event.type == carb.input.KeyboardEventType.KEY_PRESS:
             if event.input.name == "L":
                 self.reset()
-            if event.input.name == "K":
-                self._close_gripper = not self._close_gripper
+            elif event.input.name in ["K","J"]:
+                self._delta_gripper += self._INPUT_KEY_MAPPING[event.input.name]
+            # elif event.input.name in ["J"]:
+            #     self._delta_gripper += self._INPUT_KEY_MAPPING[event.input.name]
             elif event.input.name in ["W", "S", "A", "D", "Q", "E"]:
                 self._delta_pos += self._INPUT_KEY_MAPPING[event.input.name]
             elif event.input.name in ["Z", "X", "T", "G", "C", "V"]:
                 self._delta_rot += self._INPUT_KEY_MAPPING[event.input.name]
         # remove the command when un-pressed
         if event.type == carb.input.KeyboardEventType.KEY_RELEASE:
+            # if event.input.name in ["K", "J"]:
+            #     self._delta_gripper -= self._INPUT_KEY_MAPPING[event.input.name]
             if event.input.name in ["W", "S", "A", "D", "Q", "E"]:
                 self._delta_pos -= self._INPUT_KEY_MAPPING[event.input.name]
             elif event.input.name in ["Z", "X", "T", "G", "C", "V"]:
@@ -166,7 +180,8 @@ class Se3Keyboard(DeviceBase):
         """Creates default key binding."""
         self._INPUT_KEY_MAPPING = {
             # toggle: gripper command
-            "K": True,
+            "K": np.array([1.0]) * self.gripper_sensitivity,
+            "J": np.array([-1.0]) * self.gripper_sensitivity,
             # x-axis (forward)
             "W": np.asarray([1.0, 0.0, 0.0]) * self.pos_sensitivity,
             "S": np.asarray([-1.0, 0.0, 0.0]) * self.pos_sensitivity,

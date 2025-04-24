@@ -41,7 +41,8 @@ import torch
 
 import omni.log
 
-from isaaclab.devices import Se3Gamepad, Se3HandTracking, Se3Keyboard, Se3SpaceMouse
+# from isaaclab.devices import Se3Gamepad, Se3HandTracking, Se3Keyboard, Se3SpaceMouse
+
 from isaaclab.envs import ViewerCfg
 from isaaclab.envs.ui import ViewportCameraController
 from isaaclab.managers import TerminationTermCfg as DoneTerm
@@ -54,26 +55,25 @@ from pathlib import Path
 root_path = Path(__file__).resolve().parents[2]  # train.py → custom_rl → work_dir → IsaacLab
 sys.path.append(str(root_path))
 
+from work_dir.teleoperation.devices.se3_keyboard import Se3Keyboard
 import work_dir.custom_tasks
 from omni.physx.scripts import deformableUtils, physicsUtils
 # kiis
 from pxr import Gf, UsdGeom, UsdPhysics, UsdShade, Sdf, Usd
 import isaacsim.core.utils.stage as stage_utils
 
-def pre_process_actions(delta_pose: torch.Tensor, gripper_command: bool) -> torch.Tensor:
+
+
+def pre_process_actions(delta_pose: torch.Tensor, gripper_command: torch.Tensor) -> torch.Tensor:
     """Pre-process actions for the environment."""
-    # compute actions based on environment
     if "Reach" in args_cli.task:
-        # note: reach is the only one that uses a different action space
-        # compute actions
         return delta_pose
     else:
-        # resolve gripper command
-        gripper_vel = torch.zeros(delta_pose.shape[0], 1, device=delta_pose.device)
-        gripper_vel[:] = -1.0 if gripper_command else 1.0
-        # compute actions
-        return torch.concat([delta_pose, gripper_vel], dim=1)
+        gripper_vel = torch.zeros(delta_pose.shape[0], 2, device=delta_pose.device)
+        gripper_vel[:] = gripper_command[0]
+        actions = torch.concat([delta_pose, gripper_vel], dim=1)
 
+        return actions
 
 def main():
     """Running keyboard teleoperation with Isaac Lab manipulation environment."""
@@ -100,6 +100,7 @@ def main():
     if args_cli.teleop_device.lower() == "keyboard":
         teleop_interface = Se3Keyboard(
             pos_sensitivity=0.05 * args_cli.sensitivity, rot_sensitivity=0.05 * args_cli.sensitivity
+            , gripper_sensitivity=50. * args_cli.sensitivity
         )
 
     # add teleoperation key for env reset
@@ -121,14 +122,15 @@ def main():
     obstacle_prim = stage_utils.get_current_stage().GetPrimAtPath(object_path)
     mass_body = UsdPhysics.MassAPI.Apply(obstacle_prim)
     mass_body.CreateMassAttr().Set(1.0)
-    deformableUtils.add_physx_deformable_body(
-        stage_utils.get_current_stage(),
-        object_path,
-        collision_simplification=True,
-        simulation_hexahedral_resolution=8,
-        self_collision=False,
-        solver_position_iteration_count=20
-    )
+    
+    # deformableUtils.add_physx_deformable_body(
+    #     stage_utils.get_current_stage(),
+    #     object_path,
+    #     # collision_simplification=True,
+    #     simulation_hexahedral_resolution=8,
+    #     self_collision=False,
+    #     solver_position_iteration_count=20
+    # )
     
     while simulation_app.is_running():
         # run everything in inference mode
@@ -143,7 +145,8 @@ def main():
             actions = pre_process_actions(delta_pose, gripper_command)
             # apply actions
             env.step(actions)
-
+            print(env.scene._articulations["robot"].data.joint_pos[...,7:])
+            print(actions)
             if should_reset_recording_instance:
                 env.reset()
                 should_reset_recording_instance = False

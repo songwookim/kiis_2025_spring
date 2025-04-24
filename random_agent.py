@@ -67,11 +67,14 @@ def main():
             # sample actions from -1 to 1
             actions = 2 * torch.rand(env.action_space.shape, device=env.unwrapped.device) - 1
             actions[...,:6] = 0.0
-            
-            # apply actions
-
+            # env.env.scene._articulations["robot"].data.joint_pos_target[...,8] = t2
+            # env.env.scene._articulations["robot"].data.joint_pos_target[...,7] = t1
+            # apply actions     
+            env.env.scene._articulations["robot"].data.joint_effort_target[...,7] = -t1
+            env.env.scene._articulations["robot"].data.joint_effort_target[...,8] = -t2 
             actions[...,6] = t1
             actions[...,7] = t2
+            print(env.env.scene._articulations["robot"].data.joint_pos[...,7:9])
             env.step(actions)
 
     # close the simulator

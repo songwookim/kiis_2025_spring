@@ -68,7 +68,7 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
         self.scene.object = DeformableObjectCfg(
             prim_path="{ENV_REGEX_NS}/Object",
         init_state=DeformableObjectCfg.InitialStateCfg(pos=[0.5, 0, 0.055], rot=[1, 0, 0, 0]), # type: ignore            
-            debug_vis=True,
+            debug_vis=False,
             spawn=sim_utils.MeshCuboidCfg(
                 size=(0.055, 0.055, 0.055),
                 deformable_props=DeformableBodyPropertiesCfg(
@@ -84,7 +84,7 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
                     poissons_ratio=0.4, 
                     # youngs_modulus=1e5, 
                     youngs_modulus=1.5e6, 
-                    dynamic_friction=10.
+                    dynamic_friction=30.
                 ),
                 visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.5, 0.1, 0.0)),
                 mass_props=sim_utils.MassPropertiesCfg(
@@ -113,13 +113,6 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
             ],
         )
         
-        # self.terminations.object_dropping = None #type: ignore
-        # self.rewards.reaching_object = None #type: ignore
-        # self.rewards.lifting_object = None #type: ignore
-        # self.rewards.object_goal_tracking = None #type: ignore
-        # self.rewards.object_goal_tracking_fine_grained = None #type: ignore
-        # self.observations.policy.object_position = None #type: ignore
-
 @configclass
 class FrankaCubeLiftEnvCfg_PLAY(FrankaCubeLiftEnvCfg):
     def __post_init__(self):

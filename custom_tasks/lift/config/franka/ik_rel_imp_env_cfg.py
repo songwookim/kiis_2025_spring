@@ -18,6 +18,7 @@ from isaaclab.sensors import FrameTransformerCfg
 ##
 # Pre-defined configs
 ##
+import isaaclab.envs.mdp as mdp
 from isaaclab_assets.robots.franka import FRANKA_PANDA_HIGH_PD_CFG  # isort: skip
 from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
 from isaaclab.markers.config import DEFORMABLE_TARGET_MARKER_CFG
@@ -41,13 +42,13 @@ class FrankaCubeLiftEnvCfg(joint_pos_def_env_cfg.FrankaCubeLiftEnvCfg):
             scale=0.5,
             body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=[0.0, 0.0, 0.107]),
         )
-        
         self.scene.object = DeformableObjectCfg(
             prim_path="{ENV_REGEX_NS}/Object",
             init_state=DeformableObjectCfg.InitialStateCfg(pos=[0.5, 0, 0.055], rot=[1, 0, 0, 0]), # type: ignore            
             debug_vis=True,
-            spawn=sim_utils.MeshCuboidCfg(
-                size=(0.055, 0.055, 0.055),
+            spawn=sim_utils.MeshSphereCfg(
+                radius=0.0275,
+                # size=(0.055, 0.055, 0.055),
                 deformable_props=DeformableBodyPropertiesCfg(
                     rest_offset=0.0,
                     contact_offset=0.001,
@@ -63,49 +64,38 @@ class FrankaCubeLiftEnvCfg(joint_pos_def_env_cfg.FrankaCubeLiftEnvCfg):
                     youngs_modulus=1.5e6, 
                     dynamic_friction=10.
                 ),
-                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.5, 0.1, 0.0)),
+                visual_material=sim_utils.PreviewSurfaceCfg(
+                    diffuse_color=(0.5521, 0.1974, 0.10872),
+                    emissive_color=(0.54826, 0.14395, 0.14395),
+                    ),
                 mass_props=sim_utils.MassPropertiesCfg(
                     mass=0.1,
                 ),
             )
         )
+        
+        self.scene.robot.actuators["panda_hand"].stiffness = 0.0
+        self.scene.robot.actuators["panda_hand"].damping = 0.0
+        self.actions.gripper_action = mdp.JointEffortActionCfg(
+            asset_name="robot", 
+            joint_names=["panda_finger.*"], 
+            scale=1.0
+        )
+        
         # self.actions.gripper_action = JointImpedanceActionCfg(
         #     asset_name="robot",
         #     joint_names=["panda_finger.*"],
         #     controller=JointImpedanceControllerCfg(
-        #         impedance_mode="variable_kp",
+        #         impedance_mode="fixed",
         #         stiffness=100.0,
         #         damping_ratio=1.0,
-        #         stiffness_limits=(0., 50.),
-        #         # damping_ratio_limits=(0., 1.0),
+        #         # stiffness_limits=(250., 500.),
+        #         # damping_ratio_limits=(0.5, 1.5),
         #     ),
         #     scale=1.0,
         # )
-        # self.scene.robot.actuators["panda_hand"].stiffness = 0.0
-        # self.scene.robot.actuators["panda_hand"].damping = 0.0
-        self.actions.gripper_action = JointImpedanceActionCfg(
-            asset_name="robot",
-            joint_names=["panda_finger.*"],
-            controller=JointImpedanceControllerCfg(
-                impedance_mode="fixed",
-                stiffness=100.0,
-                damping_ratio=1.0,
-                stiffness_limits=(250., 500.),
-                damping_ratio_limits=(0.5, 1.5),
-            ),
-            scale=1.0,
-        )
         
-        # self.scene.object = DeformableObjectCfg(
-        #     prim_path="{ENV_REGEX_NS}/Object",
-        #     init_state=DeformableObjectCfg.InitialStateCfg(pos=[0.5, 0, 0.055], rot=[1, 0, 0, 0]), # type: ignore            
-        #     debug_vis=True,
-        #     spawn=UsdFileCfg(
-        #         usd_path=f"{ISAACLAB_NUCLEUS_DIR}/Objects/Teddy_Bear/teddy_bear.usd",
-        #         scale=(0.005, 0.005, 0.005),
-        #     ),
-        # )
-        
+
         self.scene.replicate_physics = False
 
 
