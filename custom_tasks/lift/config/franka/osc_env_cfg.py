@@ -14,7 +14,6 @@ from . import joint_pos_def_env_cfg
 ##
 from isaaclab_assets.robots.franka import FRANKA_PANDA_CFG  # isort: skip
 
-
 @configclass
 class FrankaCubeLiftEnvCfg(joint_pos_def_env_cfg.FrankaCubeLiftEnvCfg):
     def __post_init__(self):
@@ -51,7 +50,6 @@ class FrankaCubeLiftEnvCfg(joint_pos_def_env_cfg.FrankaCubeLiftEnvCfg):
                 motion_stiffness_limits_task=(50.0, 200.0),
                 # motion_stiffness_limits_task=(5.0, 50.0),
                 nullspace_control="position",
-                
             ),
             nullspace_joint_pos_target="center",
             position_scale=2, # 1.0

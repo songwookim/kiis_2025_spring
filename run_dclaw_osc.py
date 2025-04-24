@@ -4,26 +4,27 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 """
-This script demonstrates different single-arm manipulators.
+This script demonstrates how to use the operational space controller (OSC) with the simulator.
+
+The OSC controller can be configured in different modes. It uses the dynamical quantities such as Jacobians and
+mass matricescomputed by PhysX.
 
 .. code-block:: bash
 
     # Usage
-    ./isaaclab.sh -p source/standalone/demos/arms.py
+    ./isaaclab.sh -p scripts/tutorials/05_controllers/run_osc.py
 
 """
 
 """Launch Isaac Sim Simulator first."""
 
 import argparse
-import random
-
-import tqdm
 
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
-parser = argparse.ArgumentParser(description="This script demonstrates different single-arm manipulators.")
+parser = argparse.ArgumentParser(description="Tutorial on using the operational space controller.")
+parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -35,148 +36,77 @@ simulation_app = app_launcher.app
 
 """Rest everything follows."""
 
-import numpy as np
 import torch
 
-import sys
-from pathlib import Path
-root_path = Path(__file__).resolve().parents[2]  # train.py → custom_rl → work_dir → IsaacLab
-sys.path.append(str(root_path))
-
-
-import isaacsim.core.utils.prims as prim_utils
-from isaaclab.assets.articulation import ArticulationCfg, Articulation
-from isaacsim.core.prims import Articulation as Art_core
 import isaaclab.sim as sim_utils
-from isaaclab.assets import Articulation, ArticulationData
-from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+from isaaclab.assets import Articulation, AssetBaseCfg
+from isaaclab.controllers import OperationalSpaceController, OperationalSpaceControllerCfg
+from isaaclab.markers import VisualizationMarkers
+from isaaclab.markers.config import FRAME_MARKER_CFG
+from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
+from isaaclab.sensors import ContactSensorCfg
+from isaaclab.utils import configclass
+from isaaclab.utils.math import (
+    combine_frame_transforms,
+    matrix_from_quat,
+    quat_inv,
+    quat_rotate_inverse,
+    subtract_frame_transforms,
+)
 
 ##
 # Pre-defined configs
 ##
-# isort: off
-# from omni.isaac.lab_assets import (
-#     UR10_CFG,
-# )
+from isaaclab_assets import FRANKA_PANDA_HIGH_PD_CFG  # isort:skip
 from custom_utils.assets import WORK_DIR
-from custom_assets.universal_robots import UR10_DCLAW_E_CFG,UR10_CFG, UR10_DCLAW_CFG
-import os
-from isaaclab.assets.deformable_object.deformable_object import DeformableObject
-from isaaclab.assets.deformable_object.deformable_object_cfg import DeformableObjectCfg
-from isaaclab.sim.spawners.materials.physics_materials_cfg import DeformableBodyMaterialCfg
-from pxr import UsdPhysics
-import isaacsim.core.utils.stage as stage_utils
-# isort: on
-
-obj_flag = True
-
-def define_origins(num_origins: int, spacing: float) -> list[list[float]]:
-    """Defines the origins of the the scene."""
-    # create tensor based on number of environments
-    env_origins = torch.zeros(num_origins, 3)
-    # create a grid of origins
-    num_rows = np.floor(np.sqrt(num_origins))
-    num_cols = np.ceil(num_origins / num_rows)
-    xx, yy = torch.meshgrid(torch.arange(num_rows), torch.arange(num_cols), indexing="xy")
-    env_origins[:, 0] = spacing * xx.flatten()[:num_origins] - spacing * (num_rows - 1) / 2
-    env_origins[:, 1] = spacing * yy.flatten()[:num_origins] - spacing * (num_cols - 1) / 2
-    env_origins[:, 2] = 0.0
-    # return the origins
-    return env_origins.tolist()
+from custom_assets.universal_robots import UR10_DCLAW_CFG
 
 
-def design_scene() -> tuple[dict, list[list[float]]]:
-    """Designs the scene."""
-    # Ground-plane
-    cfg = sim_utils.GroundPlaneCfg()
-    cfg.func("/World/defaultGroundPlane", cfg)
-    
-    # Lights
-    cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
-    cfg.func("/World/Light", cfg)
+@configclass
+class SceneCfg(InteractiveSceneCfg):
+    """Configuration for a simple scene with a tilted wall."""
 
-    # Each group will have a mount and a robot on top of it
-    origins = torch.tensor([0,0,0], device="cuda").reshape(1,3)
-    
-    # Origin with UR10_DCLAW
-    prim_utils.create_prim("/World/Origin", "Xform", translation=origins[0])
-    
-    # markers
-    marker_cfg = VisualizationMarkersCfg(
-        prim_path="/Visuals/myMarkers",
-        markers={
-            "frame": sim_utils.UsdFileCfg(
-                usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/UIElements/frame_prim.usd",
-                scale=(0.1, 0.1, 0.1),
-                
-            ),
-        }
+    # ground plane
+    ground = AssetBaseCfg(
+        prim_path="/World/defaultGroundPlane",
+        spawn=sim_utils.GroundPlaneCfg(),
     )
-    my_visualizer = VisualizationMarkers(marker_cfg)
-    
-    # -- Table
-    cfg = sim_utils.UsdFileCfg(
-        usd_path=f"{WORK_DIR}/custom_assets/Objects/rounded_table.usd", scale=(1, 1, 1)
+
+    # lights
+    dome_light = AssetBaseCfg(
+        prim_path="/World/Light", spawn=sim_utils.DomeLightCfg(intensity=3000.0, color=(0.75, 0.75, 0.75))
     )
-    cfg.func("/World/Origin/Table", cfg, translation=(0.0, 0.0, .0))
-    
-    # -- Robot
-    # ur10_dclaw_cfg : ArticulationCfg = UR10_CFG.replace(prim_path="/World/Origin/Robot")
-    ur10_dclaw_cfg : ArticulationCfg = UR10_DCLAW_CFG.replace(prim_path="/World/Origin/Robot")
-    ur10_dclaw_cfg.init_state.pos = (-0.3, 0.0, 0.7)
-    ur10_dclaw_cfg.spawn.rigid_props.disable_gravity = True
-    ur10_dclaw = Articulation(cfg=ur10_dclaw_cfg)
-    
-    # -- Object
-    cfg_cone = sim_utils.MeshCylinderCfg(
-        radius=0.045,
-        height=0.2525,  
-        deformable_props=sim_utils.DeformableBodyPropertiesCfg(rest_offset=0.0),
-        visual_material=sim_utils.PreviewSurfaceCfg(),
-        physics_material =sim_utils.DeformableBodyMaterialCfg(),        
+
+    # Tilted wall
+    tilted_wall = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/TiltedWall",
+        spawn=sim_utils.CuboidCfg(
+            size=(2.0, 1.5, 0.01),
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), opacity=0.1),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+            activate_contact_sensors=True,
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(
+            pos=(0.6 + 0.085, 0.0, 0.3), rot=(0.9238795325, 0.0, -0.3826834324, 0.0)
+        ),
     )
-    # for idx, origin in tqdm.tqdm(enumerate(origins), total=len(origins)):
-        # randomly select an object to spawn
-    obj_cfg : sim_utils.MeshCylinderCfg= cfg_cone
-    obj_cfg.physics_material : DeformableBodyMaterialCfg # type: ignore
-    # randomize the young modulus (somewhere between a Silicone 30 and Silicone 70)
-    obj_cfg.physics_material.youngs_modulus = 3.3e6 #random.uniform(0.7e6, 3.3e6)
-    # randomize the poisson's ratio
-    obj_cfg.physics_material.poissons_ratio = 0.25
-    # randomize the color
-    obj_cfg.visual_material.diffuse_color = (random.random(), random.random(), random.random())
-    obj_cfg.visual_material.dynamic_friction = 10
-    obj_cfg.visual_material.elasticity_damping = 0.01
+
+    contact_forces = ContactSensorCfg(
+        prim_path="/World/envs/env_.*/TiltedWall",
+        update_period=0.0,
+        history_length=2,
+        debug_vis=False,
+    )
+    robot = UR10_DCLAW_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    robot.actuators["arm"].stiffness = 0.0
+    robot.actuators["arm"].damping = 0.0
+    robot.actuators["gripper"].stiffness = 0.0
+    robot.actuators["gripper"].damping = 0.0
+    robot.spawn.rigid_props.disable_gravity = True
+
     
-    # spawn the object
-    if obj_flag :
-        obj_cfg.func(f"/World/Origin/Object1", obj_cfg, translation=(0.17869, 0.143, .83))
-            
-        def_obj_cfg = DeformableObjectCfg.InitialStateCfg()
-        def_obj_cfg.pos = (0., 0.,  0.)
-        cfg = DeformableObjectCfg(
-            prim_path="/World/Origin/Object1",
-            spawn=None,
-            init_state=def_obj_cfg,
-        )
-        deformable_object = DeformableObject(cfg=cfg)
-    # return the scene information
-    scene_entities = {
-        "ur10_dclaw": ur10_dclaw,
-        "marker": my_visualizer
-        # "deformable_object": deformable_object
-    }
-    if obj_flag :
-        scene_entities = {
-            "ur10_dclaw": ur10_dclaw,
-            "deformable_object": deformable_object,
-            "marker": my_visualizer
-        }           
-    return scene_entities, origins
 import matplotlib.pyplot as plt
-
-
 """
 00 = 'base_link'
 01 = 'shoulder_link'
@@ -195,179 +125,374 @@ import matplotlib.pyplot as plt
 14 = 'link_f2_3'
 15 = 'link_f3_3'
 """
-def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articulation], origins: torch.Tensor):
-    """Runs the simulation loop."""
+
+def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
+    """Runs the simulation loop.
+
+    Args:
+        sim: (SimulationContext) Simulation context.
+        scene: (InteractiveScene) Interactive scene.
+    """
+
+    # Extract scene entities for readability.
+    robot = scene["robot"]
+    contact_forces = scene["contact_forces"]
+
+    # Obtain indices for the end-effector and arm joints
+    ee_frame_name = "link_f1_3" # panda-left finger
+    arm_joint_names = ["^(shoulder_pan_joint|shoulder_lift_joint|elbow_joint|wrist_1_joint|wrist_2_joint|wrist_3_joint)$"]
+    ee_frame_idx = robot.find_bodies(ee_frame_name)[0][0]
+    arm_joint_ids = robot.find_joints(arm_joint_names)[0]
+
+    # Create the OSC
+    osc_cfg = OperationalSpaceControllerCfg(
+        target_types=["pose_abs", "wrench_abs"],
+        impedance_mode="variable_kp",
+        inertial_dynamics_decoupling=True,
+        partial_inertial_dynamics_decoupling=False,
+        gravity_compensation=False,
+        motion_damping_ratio_task=1.0,
+        contact_wrench_stiffness_task=[0.0, 0.0, 0.1, 0.0, 0.0, 0.0],
+        motion_control_axes_task=[1, 1, 0, 1, 1, 1],
+        contact_wrench_control_axes_task=[0, 0, 1, 0, 0, 0],
+        nullspace_control="none",
+    )
+    osc = OperationalSpaceController(osc_cfg, num_envs=scene.num_envs, device=sim.device)
+
+    # Markers
+    frame_marker_cfg = FRAME_MARKER_CFG.copy()
+    frame_marker_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
+    ee_marker = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/ee_current"))
+    goal_marker = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/ee_goal"))
+
+    # Define targets for the arm
+    ee_goal_pose_set_tilted_b = torch.tensor(
+        [
+            [0.6, 0.15, 0.3, 0.0, 0.92387953, 0.0, 0.38268343],
+            [0.6, -0.3, 0.3, 0.0, 0.92387953, 0.0, 0.38268343],
+            [0.8, 0.0, 0.5, 0.0, 0.92387953, 0.0, 0.38268343],
+        ],
+        device=sim.device,
+    )
+    ee_goal_wrench_set_tilted_task = torch.tensor(
+        [
+            [0.0, 0.0, 10.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 10.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 10.0, 0.0, 0.0, 0.0],
+        ],
+        device=sim.device,
+    )
+    kp_set_task = torch.tensor(
+        [
+            [360.0, 360.0, 360.0, 360.0, 360.0, 360.0],
+            [420.0, 420.0, 420.0, 420.0, 420.0, 420.0],
+            [320.0, 320.0, 320.0, 320.0, 320.0, 320.0],
+        ],
+        device=sim.device,
+    )
+    ee_target_set = torch.cat([ee_goal_pose_set_tilted_b, ee_goal_wrench_set_tilted_task, kp_set_task], dim=-1)
+
     # Define simulation stepping
     sim_dt = sim.get_physics_dt()
-    sim_time = 0.0
+
+    # Update existing buffers
+    # Note: We need to update buffers before the first step for the controller.
+    robot.update(dt=sim_dt)
+
+    # Get the center of the robot soft joint limits
+    joint_centers = torch.mean(robot.data.soft_joint_pos_limits[:, arm_joint_ids, :], dim=-1)
+
+    # get the updated states
+    (
+        jacobian_b,
+        mass_matrix,
+        gravity,
+        ee_pose_b,
+        ee_vel_b,
+        root_pose_w,
+        ee_pose_w,
+        ee_force_b,
+        joint_pos,
+        joint_vel,
+    ) = update_states(sim, scene, robot, ee_frame_idx, arm_joint_ids, contact_forces)
+
+    # Track the given target command
+    current_goal_idx = 0  # Current goal index for the arm
+    command = torch.zeros(
+        scene.num_envs, osc.action_dim, device=sim.device
+    )  # Generic target command, which can be pose, position, force, etc.
+    ee_target_pose_b = torch.zeros(scene.num_envs, 7, device=sim.device)  # Target pose in the body frame
+    ee_target_pose_w = torch.zeros(scene.num_envs, 7, device=sim.device)  # Target pose in the world frame (for marker)
+
+    # Set joint efforts to zero
+    zero_joint_efforts = torch.zeros(scene.num_envs, robot.num_joints, device=sim.device)
+    joint_efforts = torch.zeros(scene.num_envs, len(arm_joint_ids), device=sim.device)
+
     count = 0
-    robot : Articulation= entities["ur10_dclaw"]
-    robot.actuators["arm"].stiffness = torch.zeros_like(robot.actuators["arm"].stiffness ).cuda() # for effort control
-    robot.actuators["arm"].damping = torch.zeros_like(robot.actuators["arm"].damping ).cuda()
-    robot.write_joint_stiffness_to_sim(robot.actuators["arm"].stiffness)
-    robot.write_joint_damping_to_sim(robot.actuators["arm"].damping)
-    # robot.actuators["gripper"].stiffness = torch.zeros_like(robot.actuators["gripper"].stiffness ).cuda() # for effort control
-    # robot.actuators["gripper"].damping = torch.zeros_like(robot.actuators["gripper"].damping ).cuda()
-    # robot.write_joint_stiffness_to_sim(robot.actuators["gripper"].stiffness)
-    # robot.write_joint_damping_to_sim(robot.actuators["gripper"].damping)
-    
-    marker : VisualizationMarkers = entities["marker"] # type: ignore # ignore
-        
-    robot_core = Art_core(robot.root_physx_view.prim_paths[0])
-    robot_core.initialize()
-    if obj_flag :
-        object : DeformableObject = entities["deformable_object"] # type: ignore
-    # Simulate physics
-    torque = 0.01
-    torque_g = 0.01
-    arm_ids = robot.find_joints([".*joint"])[0]
-    gripper_ids = robot.find_joints(["joint.*"])[0]
-    
-    n_arm = len(arm_ids)
-    # robot.set_joint_position_target(robot.data.default_joint_pos[:,:n], joint_ids=arm_ids)
-    n_gripper = len(gripper_ids)
-    
-    history_ft = []
+    # Simulation loop
     while simulation_app.is_running():
-        # reset
-        if count % 1100 == 0:
-            # reset counters
-            sim_time = 0.0
-            count = 0
-            # reset the scene entities
-            
-            root_state = robot.data.default_root_state.clone()
-            
-            root_state[:, :3] += origins[0]
-        
-            robot.write_root_link_pose_to_sim(root_state[:, :7])
-            robot.write_root_com_velocity_to_sim(root_state[:, 7:])
-            
-            
-            # set joint positions
-            default_joint_pos, default_joint_vel = robot.data.default_joint_pos.clone(), robot.data.default_joint_vel.clone()
-            # robot.set_joint_position_target(default_joint_pos)
-            # robot.set_joint_velocity_target(default_joint_vel)
-            # robot.write_joint_state_to_sim(default_joint_pos, default_joint_vel)
-            robot.set_joint_effort_target(torch.zeros_like(robot.data.joint_pos[:,:], device=sim.device))
+        # reset every 500 steps
+        if count % 500 == 0:
+            # reset joint state to default
+            default_joint_pos = robot.data.default_joint_pos.clone()
+            default_joint_vel = robot.data.default_joint_vel.clone()
+            robot.write_joint_state_to_sim(default_joint_pos, default_joint_vel)
+            robot.set_joint_effort_target(zero_joint_efforts)  # Set zero torques in the initial step
             robot.write_data_to_sim()
             robot.reset()
+            # reset contact sensor
+            contact_forces.reset()
+            # reset target pose
             robot.update(sim_dt)
-            
-            
-            if obj_flag:
-                object.write_nodal_state_to_sim(object.data.default_nodal_state_w)
-                object.reset()
-                obstacle_prim = stage_utils.get_current_stage().GetPrimAtPath("/World/Origin/Object1")
-                mass_body = UsdPhysics.MassAPI.Apply(obstacle_prim)
-                mass_body.CreateMassAttr().Set(0.1)
-            
-            # clear internal buffers
-            robot.reset()
-            print("[INFO]: Resetting robots state...")
+            _, _, _, ee_pose_b, _, _, _, _, _, _ = update_states(
+                sim, scene, robot, ee_frame_idx, arm_joint_ids, contact_forces
+            )  # at reset, the jacobians are not updated to the latest state
+            command, ee_target_pose_b, ee_target_pose_w, current_goal_idx = update_target(
+                sim, scene, osc, root_pose_w, ee_target_set, current_goal_idx
+            )
+            # set the osc command
+            osc.reset()
+            command, task_frame_pose_b = convert_to_task_frame(osc, command=command, ee_target_pose_b=ee_target_pose_b)
+            osc.set_command(command=command, current_ee_pose_b=ee_pose_b, current_task_frame_pose_b=task_frame_pose_b)
+        else:
+            # get the updated states
+            (
+                jacobian_b,
+                mass_matrix,
+                gravity,
+                ee_pose_b,
+                ee_vel_b,
+                root_pose_w,
+                ee_pose_w,
+                ee_force_b,
+                joint_pos,
+                joint_vel,
+            ) = update_states(sim, scene, robot, ee_frame_idx, arm_joint_ids, contact_forces)
+            # compute the joint commands
+            joint_efforts = osc.compute(
+                jacobian_b=jacobian_b,
+                current_ee_pose_b=ee_pose_b,
+                current_ee_vel_b=ee_vel_b,
+                current_ee_force_b=ee_force_b,
+                mass_matrix=mass_matrix,
+                gravity=gravity,
+                current_joint_pos=joint_pos,
+                current_joint_vel=joint_vel,
+                nullspace_joint_pos_target=joint_centers,
+            )
+            joint_efforts = joint_efforts*0.007
+            # apply actions
+            robot.set_joint_effort_target(joint_efforts, joint_ids=arm_joint_ids)
+            robot.write_data_to_sim()
 
-        # robot.set_joint_effort_target(torch.ones([1,n]).cuda(), joint_ids=gripper_ids)
-        # # robot.write_data_to_sim()
-        # # robot.set_joint_position_target(robot.data.default_joint_pos)
-        # # robot.set_joint_position_target(torch.zeros(1).cuda(), joint_ids=[1]) 
-        if count < 250 :
-            # robot.set_joint_effort_target(torch.ones(1)*torque, joint_ids=[1])
-            # object.write_nodal_pos_to_sim(object.data.default_nodal_state_w[0,:,:3])
-            # robot.set_joint_effort_target(torch.ones(1, device=sim.device)*torque_g, joint_ids=[14])
-            # robot.set_joint_effort_target(torch.ones(1, device=sim.device)*torque, joint_ids=[2])
-            # robot.set_joint_position_target(torch.tensor([1.2211,1.2211,1.2211],device=sim.device), joint_ids=[12,13,14])
-            robot.write_data_to_sim()
-            
-        elif count < 500 :
-            # robot.set_joint_effort_target(torch.ones(2).cuda()*torque, joint_ids=[0,1])
-            # robot.set_joint_position_target(torch.tensor([1.4,1.4,1.4],device=sim.device), joint_ids=[12,13,14])
-            # robot.set_joint_position_target(torch.tensor([-0.3,-0.3,-0.3],device=sim.device), joint_ids=[9,10,11])
-            robot.write_data_to_sim()
-        elif count < 750 :
-            # robot.set_joint_position_target(torch.tensor([-2.791],device=sim.device), joint_ids=[1])
-            robot.write_data_to_sim()
-            # robot.set_joint_position_target(torch.zeros(1).cuda(), joint_ids=[0]) 
-        # error = robot.data.joint_pos[:,n_arm:] 
-        joint_ids = [9]
-        target = torch.full((1, 1), 1.0)  # shape (N_envs, 1)
+        # update marker positions
+        ee_marker.visualize(ee_pose_w[:, 0:3], ee_pose_w[:, 3:7])
+        goal_marker.visualize(ee_target_pose_w[:, 0:3], ee_target_pose_w[:, 3:7])
 
-        robot.set_joint_effort_target(target=target, joint_ids=joint_ids)
-        
-        # print(f"effort(inv dyn = computed torque) : {robot_core.get_measured_joint_efforts().round().tolist()}")
-        # # print(f"force/torque : {robot_core.get_measured_joint_forces()[15].tolist()}")
-        # history_ft.append(robot_core.get_measured_joint_efforts()[0][14].tolist())
-        # a = robot.data.body_pos_w[0,13:][:,0]
-        # b = robot.data.body_pos_w[0,13:][:,1]
-        # c = robot.data.body_pos_w[0,13:][:,2]
-        # x = torch.sum(a)
-        # y = torch.sum(b)
-        # z = torch.sum(c)
-        # marker.visualize(robot.data.body_pos_w[0, 15:], robot.data.body_quat_w[0, 15:])
-        robot.set_joint_position_target(torch.zeros(1).cuda(), joint_ids=[0])
         # perform step
-        sim.step()
-        
+        sim.step(render=True)
+        # update robot buffers
         robot.update(sim_dt)
-        # update sim-time
-        sim_time += sim_dt
-        count += 1
         # update buffers
-        # for robot in entities.values():
+        scene.update(sim_dt)
+        # update sim-time
+        count += 1
+
+# Update robot states
+def update_states(
+    sim: sim_utils.SimulationContext,
+    scene: InteractiveScene,
+    robot: Articulation,
+    ee_frame_idx: int,
+    arm_joint_ids: list[int],
+    contact_forces,
+):
+    """Update the robot states.
+
+    Args:
+        sim: (SimulationContext) Simulation context.
+        scene: (InteractiveScene) Interactive scene.
+        robot: (Articulation) Robot articulation.
+        ee_frame_idx: (int) End-effector frame index.
+        arm_joint_ids: (list[int]) Arm joint indices.
+        contact_forces: (ContactSensor) Contact sensor.
+
+    Returns:
+        jacobian_b (torch.tensor): Jacobian in the body frame.
+        mass_matrix (torch.tensor): Mass matrix.
+        gravity (torch.tensor): Gravity vector.
+        ee_pose_b (torch.tensor): End-effector pose in the body frame.
+        ee_vel_b (torch.tensor): End-effector velocity in the body frame.
+        root_pose_w (torch.tensor): Root pose in the world frame.
+        ee_pose_w (torch.tensor): End-effector pose in the world frame.
+        ee_force_b (torch.tensor): End-effector force in the body frame.
+        joint_pos (torch.tensor): The joint positions.
+        joint_vel (torch.tensor): The joint velocities.
+
+    Raises:
+        ValueError: Undefined target_type.
+    """
+    # obtain dynamics related quantities from simulation
+    ee_jacobi_idx = ee_frame_idx - 1
+    jacobian_w = robot.root_physx_view.get_jacobians()[:, ee_jacobi_idx, :, arm_joint_ids]
+    mass_matrix = robot.root_physx_view.get_generalized_mass_matrices()[:, arm_joint_ids, :][:, :, arm_joint_ids]
+    gravity = robot.root_physx_view.get_gravity_compensation_forces()[:, arm_joint_ids]
+    # Convert the Jacobian from world to root frame
+    jacobian_b = jacobian_w.clone()
+    root_rot_matrix = matrix_from_quat(quat_inv(robot.data.root_quat_w))
+    jacobian_b[:, :3, :] = torch.bmm(root_rot_matrix, jacobian_b[:, :3, :])
+    jacobian_b[:, 3:, :] = torch.bmm(root_rot_matrix, jacobian_b[:, 3:, :])
+
+    # Compute current pose of the end-effector
+    root_pos_w = robot.data.root_pos_w
+    root_quat_w = robot.data.root_quat_w
+    ee_pos_w = robot.data.body_pos_w[:, ee_frame_idx]
+    ee_quat_w = robot.data.body_quat_w[:, ee_frame_idx]
+    ee_pos_b, ee_quat_b = subtract_frame_transforms(root_pos_w, root_quat_w, ee_pos_w, ee_quat_w)
+    root_pose_w = torch.cat([root_pos_w, root_quat_w], dim=-1)
+    ee_pose_w = torch.cat([ee_pos_w, ee_quat_w], dim=-1)
+    ee_pose_b = torch.cat([ee_pos_b, ee_quat_b], dim=-1)
+
+    # Compute the current velocity of the end-effector
+    ee_vel_w = robot.data.body_vel_w[:, ee_frame_idx, :]  # Extract end-effector velocity in the world frame
+    root_vel_w = robot.data.root_vel_w  # Extract root velocity in the world frame
+    relative_vel_w = ee_vel_w - root_vel_w  # Compute the relative velocity in the world frame
+    ee_lin_vel_b = quat_rotate_inverse(robot.data.root_quat_w, relative_vel_w[:, 0:3])  # From world to root frame
+    ee_ang_vel_b = quat_rotate_inverse(robot.data.root_quat_w, relative_vel_w[:, 3:6])
+    ee_vel_b = torch.cat([ee_lin_vel_b, ee_ang_vel_b], dim=-1)
+
+    # Calculate the contact force
+    ee_force_w = torch.zeros(scene.num_envs, 3, device=sim.device)
+    sim_dt = sim.get_physics_dt()
+    contact_forces.update(sim_dt)  # update contact sensor
+    # Calculate the contact force by averaging over last four time steps (i.e., to smoothen) and
+    # taking the max of three surfaces as only one should be the contact of interest
+    ee_force_w, _ = torch.max(torch.mean(contact_forces.data.net_forces_w_history, dim=1), dim=1)
+
+    # This is a simplification, only for the sake of testing.
+    ee_force_b = ee_force_w
+
+    # Get joint positions and velocities
+    joint_pos = robot.data.joint_pos[:, arm_joint_ids]
+    joint_vel = robot.data.joint_vel[:, arm_joint_ids]
+
+    return (
+        jacobian_b,
+        mass_matrix,
+        gravity,
+        ee_pose_b,
+        ee_vel_b,
+        root_pose_w,
+        ee_pose_w,
+        ee_force_b,
+        joint_pos,
+        joint_vel,
+    )
         
-    # 데이터 분리
-    forces = [data[:3] for data in history_ft]  # Force: F_x, F_y, F_z
-    torques = [data[3:] for data in history_ft] # Torque: τ_x, τ_y, τ_z
 
-    # Force와 Torque를 각각 Transpose하여 개별 데이터 시리즈로 분리
-    forces = list(zip(*forces))  # F_x, F_y, F_z 각각의 시리즈
-    torques = list(zip(*torques))  # τ_x, τ_y, τ_z 각각의 시리즈
+# Convert the target commands to the task frame
+def convert_to_task_frame(osc: OperationalSpaceController, command: torch.tensor, ee_target_pose_b: torch.tensor):
+    """Converts the target commands to the task frame.
 
-    # Plotting
-    plt.figure(figsize=(12, 8))
+    Args:
+        osc: OperationalSpaceController object.
+        command: Command to be converted.
+        ee_target_pose_b: Target pose in the body frame.
 
-    # Force Plot
-    plt.subplot(2, 1, 1)
-    for i, force in enumerate(forces):
-        plt.plot(force, label=['F_x', 'F_y', 'F_z'][i])
-    plt.title('Forces Over Time')
-    plt.xlabel('Time Steps')
-    plt.ylabel('Force Values')
-    plt.legend()
-    plt.grid(True)
+    Returns:
+        command (torch.tensor): Target command in the task frame.
+        task_frame_pose_b (torch.tensor): Target pose in the task frame.
 
-    # Torque Plot
-    plt.subplot(2, 1, 2)
-    for i, torque in enumerate(torques):
-        plt.plot(torque, label=['τ_x', 'τ_y', 'τ_z'][i])
-    plt.title('Torques Over Time')
-    plt.xlabel('Time Steps')
-    plt.ylabel('Torque Values')
-    plt.legend()
-    plt.grid(True)
+    Raises:
+        ValueError: Undefined target_type.
+    """
+    command = command.clone()
+    task_frame_pose_b = ee_target_pose_b.clone()
 
-    # Show the plots
-    plt.tight_layout()
-    plt.show()
-        
-        
+    cmd_idx = 0
+    for target_type in osc.cfg.target_types:
+        if target_type == "pose_abs":
+            command[:, :3], command[:, 3:7] = subtract_frame_transforms(
+                task_frame_pose_b[:, :3], task_frame_pose_b[:, 3:], command[:, :3], command[:, 3:7]
+            )
+            cmd_idx += 7
+        elif target_type == "wrench_abs":
+            # These are already defined in target frame for ee_goal_wrench_set_tilted_task (since it is
+            # easier), so not transforming
+            cmd_idx += 6
+        else:
+            raise ValueError("Undefined target_type within _convert_to_task_frame().")
 
+    return command, task_frame_pose_b
+# Update the target commands
+def update_target(
+    sim: sim_utils.SimulationContext,
+    scene: InteractiveScene,
+    osc: OperationalSpaceController,
+    root_pose_w: torch.tensor,
+    ee_target_set: torch.tensor,
+    current_goal_idx: int,
+):
+    """Update the targets for the operational space controller.
+
+    Args:
+        sim: (SimulationContext) Simulation context.
+        scene: (InteractiveScene) Interactive scene.
+        osc: (OperationalSpaceController) Operational space controller.
+        root_pose_w: (torch.tensor) Root pose in the world frame.
+        ee_target_set: (torch.tensor) End-effector target set.
+        current_goal_idx: (int) Current goal index.
+
+    Returns:
+        command (torch.tensor): Updated target command.
+        ee_target_pose_b (torch.tensor): Updated target pose in the body frame.
+        ee_target_pose_w (torch.tensor): Updated target pose in the world frame.
+        next_goal_idx (int): Next goal index.
+
+    Raises:
+        ValueError: Undefined target_type.
+    """
+
+    # update the ee desired command
+    command = torch.zeros(scene.num_envs, osc.action_dim, device=sim.device)
+    command[:] = ee_target_set[current_goal_idx]
+
+    # update the ee desired pose
+    ee_target_pose_b = torch.zeros(scene.num_envs, 7, device=sim.device)
+    for target_type in osc.cfg.target_types:
+        if target_type == "pose_abs":
+            ee_target_pose_b[:] = command[:, :7]
+        elif target_type == "wrench_abs":
+            pass  # ee_target_pose_b could stay at the root frame for force control, what matters is ee_target_b
+        else:
+            raise ValueError("Undefined target_type within update_target().")
+
+    # update the target desired pose in world frame (for marker)
+    ee_target_pos_w, ee_target_quat_w = combine_frame_transforms(
+        root_pose_w[:, 0:3], root_pose_w[:, 3:7], ee_target_pose_b[:, 0:3], ee_target_pose_b[:, 3:7]
+    )
+    ee_target_pose_w = torch.cat([ee_target_pos_w, ee_target_quat_w], dim=-1)
+
+    next_goal_idx = (current_goal_idx + 1) % len(ee_target_set)
+
+    return command, ee_target_pose_b, ee_target_pose_w, next_goal_idx
 
 def main():
     """Main function."""
-    # Initialize the simulation context
-    sim_cfg = sim_utils.SimulationCfg(device=args_cli.device)
+    # Load kit helper
+    sim_cfg = sim_utils.SimulationCfg(dt=0.01, device=args_cli.device)
     sim = sim_utils.SimulationContext(sim_cfg)
     # Set main camera
-    sim.set_camera_view([3.5, 0.0, 3.2], [0.0, 0.0, 0.5])
-    # design scene
-    scene_entities, scene_origins = design_scene()
-    scene_origins = torch.tensor(scene_origins, device=sim.device)
+    sim.set_camera_view([2.5, 2.5, 2.5], [0.0, 0.0, 0.0])
+    # Design scene
+    scene_cfg = SceneCfg(num_envs=args_cli.num_envs, env_spacing=2.0)
+    scene = InteractiveScene(scene_cfg)
     # Play the simulator
     sim.reset()
     # Now we are ready!
     print("[INFO]: Setup complete...")
     # Run the simulator
-    run_simulator(sim, scene_entities, scene_origins)
+    run_simulator(sim, scene)
 
 
 if __name__ == "__main__":

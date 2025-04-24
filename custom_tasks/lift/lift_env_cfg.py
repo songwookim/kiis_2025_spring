@@ -90,7 +90,7 @@ class ActionsCfg:
 
     # will be set by agent env cfg
     arm_action: mdp.JointPositionActionCfg | mdp.DifferentialInverseKinematicsActionCfg = MISSING
-    gripper_action: mdp.BinaryJointPositionActionCfg = MISSING # type: ignore
+    gripper_action = MISSING # type: ignore
 
 
 @configclass

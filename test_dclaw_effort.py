@@ -60,7 +60,7 @@ from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 #     UR10_CFG,
 # )
 from custom_utils.assets import WORK_DIR
-from custom_assets.universal_robots import UR10_DCLAW_E_CFG,UR10_CFG, UR10_DCLAW_CFG
+from custom_assets.universal_robots import DCLAW_CFG
 import os
 from isaaclab.assets.deformable_object.deformable_object import DeformableObject
 from isaaclab.assets.deformable_object.deformable_object_cfg import DeformableObjectCfg
@@ -123,8 +123,8 @@ def design_scene() -> tuple[dict, list[list[float]]]:
     
     # -- Robot
     # ur10_dclaw_cfg : ArticulationCfg = UR10_CFG.replace(prim_path="/World/Origin/Robot")
-    ur10_dclaw_cfg : ArticulationCfg = UR10_DCLAW_CFG.replace(prim_path="/World/Origin/Robot")
-    ur10_dclaw_cfg.init_state.pos = (-0.3, 0.0, 0.7)
+    ur10_dclaw_cfg : ArticulationCfg = DCLAW_CFG.replace(prim_path="/World/Origin/Robot")
+    ur10_dclaw_cfg.init_state.pos = (-0.3, 0.0, 1.)
     ur10_dclaw_cfg.spawn.rigid_props.disable_gravity = True
     ur10_dclaw = Articulation(cfg=ur10_dclaw_cfg)
     
@@ -178,22 +178,21 @@ import matplotlib.pyplot as plt
 
 
 """
-00 = 'base_link'
-01 = 'shoulder_link'
-02 = 'upper_arm_link'
-03 = 'forearm_link'
-04 = 'wrist_1_link'
-05 = 'wrist_2_link'
-06 = 'wrist_3_link'
-07 = 'link_f1_1'
-08 = 'link_f2_1'
-09 = 'link_f3_1'
-10 = 'link_f1_2'
-11 = 'link_f2_2'
-12 = 'link_f3_2'
-13 = 'link_f1_3'
-14 = 'link_f2_3'
-15 = 'link_f3_3'
+00 = 'shoulder_pan_joint'
+01 = 'shoulder_lift_joint'
+02 = 'elbow_joint'
+03 = 'wrist_1_joint'
+04 = 'wrist_2_joint'
+05 = 'wrist_3_joint'
+06 = 'joint_f1_0'
+07 = 'joint_f2_0'
+08 = 'joint_f3_0'
+09 = 'joint_f1_1'
+10 = 'joint_f2_1'
+11 = 'joint_f3_1'
+12 = 'joint_f1_2'
+13 = 'joint_f2_2'
+14 = 'joint_f3_2'
 """
 def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articulation], origins: torch.Tensor):
     """Runs the simulation loop."""
@@ -202,14 +201,14 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
     sim_time = 0.0
     count = 0
     robot : Articulation= entities["ur10_dclaw"]
-    robot.actuators["arm"].stiffness = torch.zeros_like(robot.actuators["arm"].stiffness ).cuda() # for effort control
-    robot.actuators["arm"].damping = torch.zeros_like(robot.actuators["arm"].damping ).cuda()
-    robot.write_joint_stiffness_to_sim(robot.actuators["arm"].stiffness)
-    robot.write_joint_damping_to_sim(robot.actuators["arm"].damping)
-    # robot.actuators["gripper"].stiffness = torch.zeros_like(robot.actuators["gripper"].stiffness ).cuda() # for effort control
-    # robot.actuators["gripper"].damping = torch.zeros_like(robot.actuators["gripper"].damping ).cuda()
-    # robot.write_joint_stiffness_to_sim(robot.actuators["gripper"].stiffness)
-    # robot.write_joint_damping_to_sim(robot.actuators["gripper"].damping)
+    # robot.actuators["arm"].stiffness = torch.zeros_like(robot.actuators["arm"].stiffness ).cuda() # for effort control
+    # robot.actuators["arm"].damping = torch.zeros_like(robot.actuators["arm"].damping ).cuda()
+    # robot.write_joint_stiffness_to_sim(robot.actuators["arm"].stiffness)
+    # robot.write_joint_damping_to_sim(robot.actuators["arm"].damping)
+    robot.actuators["gripper"].stiffness = torch.zeros_like(robot.actuators["gripper"].stiffness ).cuda() # for effort control
+    robot.actuators["gripper"].damping = torch.zeros_like(robot.actuators["gripper"].damping ).cuda()
+    robot.write_joint_stiffness_to_sim(robot.actuators["gripper"].stiffness)
+    robot.write_joint_damping_to_sim(robot.actuators["gripper"].damping)
     
     marker : VisualizationMarkers = entities["marker"] # type: ignore # ignore
         
@@ -218,19 +217,11 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
     if obj_flag :
         object : DeformableObject = entities["deformable_object"] # type: ignore
     # Simulate physics
-    torque = 0.01
-    torque_g = 0.01
-    arm_ids = robot.find_joints([".*joint"])[0]
-    gripper_ids = robot.find_joints(["joint.*"])[0]
-    
-    n_arm = len(arm_ids)
-    # robot.set_joint_position_target(robot.data.default_joint_pos[:,:n], joint_ids=arm_ids)
-    n_gripper = len(gripper_ids)
-    
-    history_ft = []
+    i =  -1
     while simulation_app.is_running():
         # reset
-        if count % 1100 == 0:
+        
+        if count % 150 == 0:
             # reset counters
             sim_time = 0.0
             count = 0
@@ -243,18 +234,35 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
             robot.write_root_link_pose_to_sim(root_state[:, :7])
             robot.write_root_com_velocity_to_sim(root_state[:, 7:])
             
-            
             # set joint positions
             default_joint_pos, default_joint_vel = robot.data.default_joint_pos.clone(), robot.data.default_joint_vel.clone()
-            # robot.set_joint_position_target(default_joint_pos)
-            # robot.set_joint_velocity_target(default_joint_vel)
-            # robot.write_joint_state_to_sim(default_joint_pos, default_joint_vel)
+            robot.set_joint_position_target(default_joint_pos)
+            robot.set_joint_velocity_target(default_joint_vel)
+            robot.write_joint_state_to_sim(default_joint_pos, default_joint_vel)
             robot.set_joint_effort_target(torch.zeros_like(robot.data.joint_pos[:,:], device=sim.device))
+            
+            
+            if i > 7:
+                i = -1
+            i += 1    
+            joint_ids = [i]
+            target = torch.full((1, 1), 1.)  # shape (N_envs, 1)
+
+            robot.set_joint_effort_target(target=target, joint_ids=joint_ids)
+            # if i > 13:
+            #     i = 5
+            
+            # joint_ids = [i]
+            print(f"[INFO]: Resetting robots state... {i}th joint  {robot.joint_names[i]}")
+            
             robot.write_data_to_sim()
             robot.reset()
             robot.update(sim_dt)
             
             
+
+            
+                
             if obj_flag:
                 object.write_nodal_state_to_sim(object.data.default_nodal_state_w)
                 object.reset()
@@ -264,34 +272,37 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
             
             # clear internal buffers
             robot.reset()
-            print("[INFO]: Resetting robots state...")
+            
+
+            # robot.write_joint_stiffness_to_sim(0.0, joint_ids=arm_ids)
+            # robot.write_joint_damping_to_sim(0.0, joint_ids=arm_ids)
+            # robot.write_joint_effort_limit_to_sim(0.0, joint_ids=arm_ids)
+            # robot.write_joint_velocity_limit_to_sim(0.0, joint_ids=arm_ids)
+
 
         # robot.set_joint_effort_target(torch.ones([1,n]).cuda(), joint_ids=gripper_ids)
-        # # robot.write_data_to_sim()
-        # # robot.set_joint_position_target(robot.data.default_joint_pos)
-        # # robot.set_joint_position_target(torch.zeros(1).cuda(), joint_ids=[1]) 
-        if count < 250 :
-            # robot.set_joint_effort_target(torch.ones(1)*torque, joint_ids=[1])
-            # object.write_nodal_pos_to_sim(object.data.default_nodal_state_w[0,:,:3])
-            # robot.set_joint_effort_target(torch.ones(1, device=sim.device)*torque_g, joint_ids=[14])
-            # robot.set_joint_effort_target(torch.ones(1, device=sim.device)*torque, joint_ids=[2])
-            # robot.set_joint_position_target(torch.tensor([1.2211,1.2211,1.2211],device=sim.device), joint_ids=[12,13,14])
-            robot.write_data_to_sim()
+        # # # robot.write_data_to_sim()
+        # robot.set_joint_position_target(robot.data.default_joint_pos)
+        # robot.set_joint_position_target(torch.zeros(1).cuda(), joint_ids=[1]) 
+        # if count < 250 :
+        #     # robot.set_joint_effort_target(torch.ones(1)*torque, joint_ids=[1])
+        #     # object.write_nodal_pos_to_sim(object.data.default_nodal_state_w[0,:,:3])
+        #     # robot.set_joint_effort_target(torch.ones(1, device=sim.device)*torque_g, joint_ids=[14])
+        #     # robot.set_joint_effort_target(torch.ones(1, device=sim.device)*torque, joint_ids=[2])
+        #     # robot.set_joint_position_target(torch.tensor([1.2211,1.2211,1.2211],device=sim.device), joint_ids=[12,13,14])
+        #     robot.write_data_to_sim()
             
-        elif count < 500 :
-            # robot.set_joint_effort_target(torch.ones(2).cuda()*torque, joint_ids=[0,1])
-            # robot.set_joint_position_target(torch.tensor([1.4,1.4,1.4],device=sim.device), joint_ids=[12,13,14])
-            # robot.set_joint_position_target(torch.tensor([-0.3,-0.3,-0.3],device=sim.device), joint_ids=[9,10,11])
-            robot.write_data_to_sim()
-        elif count < 750 :
-            # robot.set_joint_position_target(torch.tensor([-2.791],device=sim.device), joint_ids=[1])
-            robot.write_data_to_sim()
-            # robot.set_joint_position_target(torch.zeros(1).cuda(), joint_ids=[0]) 
-        # error = robot.data.joint_pos[:,n_arm:] 
-        joint_ids = [9]
-        target = torch.full((1, 1), 1.0)  # shape (N_envs, 1)
+        # elif count < 500 :
+        #     # robot.set_joint_effort_target(torch.ones(2).cuda()*torque, joint_ids=[0,1])
+        #     # robot.set_joint_position_target(torch.tensor([1.4,1.4,1.4],device=sim.device), joint_ids=[12,13,14])
+        #     # robot.set_joint_position_target(torch.tensor([-0.3,-0.3,-0.3],device=sim.device), joint_ids=[9,10,11])
+        #     robot.write_data_to_sim()
+        # elif count < 750 :
+        #     # robot.set_joint_position_target(torch.tensor([-2.791],device=sim.device), joint_ids=[1])
+        #     robot.write_data_to_sim()
+        #     # robot.set_joint_position_target(torch.zeros(1).cuda(), joint_ids=[0]) 
+        # # error = robot.data.joint_pos[:,n_arm:] 
 
-        robot.set_joint_effort_target(target=target, joint_ids=joint_ids)
         
         # print(f"effort(inv dyn = computed torque) : {robot_core.get_measured_joint_efforts().round().tolist()}")
         # # print(f"force/torque : {robot_core.get_measured_joint_forces()[15].tolist()}")
@@ -302,8 +313,13 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
         # x = torch.sum(a)
         # y = torch.sum(b)
         # z = torch.sum(c)
-        # marker.visualize(robot.data.body_pos_w[0, 15:], robot.data.body_quat_w[0, 15:])
-        robot.set_joint_position_target(torch.zeros(1).cuda(), joint_ids=[0])
+        # marker.visualize(robot.data.body_pos_w[0, 16:], robot.data.body_quat_w[0, 15:])
+        # robot.set_joint_position_target(torch.zeros(1).cuda(), joint_ids=[0])
+
+        # target = torch.full((1, 1), 1.57)  # shape (N_envs, 1)
+
+        # robot.set_joint_position_target(target=target, joint_ids=joint_ids)
+        robot.write_data_to_sim()
         # perform step
         sim.step()
         
@@ -311,6 +327,7 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
         # update sim-time
         sim_time += sim_dt
         count += 1
+
         # update buffers
         # for robot in entities.values():
         
