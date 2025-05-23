@@ -194,30 +194,37 @@ import matplotlib.pyplot as plt
 13 = 'joint_f2_2'
 14 = 'joint_f3_2'
 """
+ta = 0.01
 def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articulation], origins: torch.Tensor):
     """Runs the simulation loop."""
     # Define simulation stepping
     sim_dt = sim.get_physics_dt()
     sim_time = 0.0
     count = 0
-    robot : Articulation= entities["ur10_dclaw"]
+    robot : Articulation= entities['ur10_dclaw']
     # robot.actuators["arm"].stiffness = torch.zeros_like(robot.actuators["arm"].stiffness ).cuda() # for effort control
     # robot.actuators["arm"].damping = torch.zeros_like(robot.actuators["arm"].damping ).cuda()
     # robot.write_joint_stiffness_to_sim(robot.actuators["arm"].stiffness)
     # robot.write_joint_damping_to_sim(robot.actuators["arm"].damping)
-    robot.actuators["gripper"].stiffness = torch.zeros_like(robot.actuators["gripper"].stiffness ).cuda() # for effort control
-    robot.actuators["gripper"].damping = torch.zeros_like(robot.actuators["gripper"].damping ).cuda()
-    robot.write_joint_stiffness_to_sim(robot.actuators["gripper"].stiffness)
-    robot.write_joint_damping_to_sim(robot.actuators["gripper"].damping)
+    # robot.actuators["gripper"].stiffness = torch.zeros_like(robot.actuators["gripper"].stiffness ).cuda() # for effort control
+    # robot.actuators["gripper"].damping = torch.zeros_like(robot.actuators["gripper"].damping ).cuda()
+    # robot.write_joint_stiffness_to_sim(robot.actuators["gripper"].stiffness)
+    # robot.write_joint_damping_to_sim(robot.actuators["gripper"].damping)
     
     marker : VisualizationMarkers = entities["marker"] # type: ignore # ignore
         
-    robot_core = Art_core(robot.root_physx_view.prim_paths[0])
-    robot_core.initialize()
+    # robot_core = Art_core(robot.root_physx_view.prim_paths[0])
+    # robot_core.initialize()
     if obj_flag :
         object : DeformableObject = entities["deformable_object"] # type: ignore
     # Simulate physics
-    i =  -1
+    i =  1
+
+    # stiffness/damping 제거
+
+    robot.write_data_to_sim()
+
+
     while simulation_app.is_running():
         # reset
         
@@ -241,13 +248,13 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
             robot.write_joint_state_to_sim(default_joint_pos, default_joint_vel)
             robot.set_joint_effort_target(torch.zeros_like(robot.data.joint_pos[:,:], device=sim.device))
             
-            
-            if i > 7:
+            if i >  7:
                 i = -1
             i += 1    
             joint_ids = [i]
-            target = torch.full((1, 1), 1.)  # shape (N_envs, 1)
-
+            
+            target = torch.full((1, 1), ta)  # shape (N_envs, 1)
+ 
             robot.set_joint_effort_target(target=target, joint_ids=joint_ids)
             # if i > 13:
             #     i = 5
@@ -258,10 +265,6 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
             robot.write_data_to_sim()
             robot.reset()
             robot.update(sim_dt)
-            
-            
-
-            
                 
             if obj_flag:
                 object.write_nodal_state_to_sim(object.data.default_nodal_state_w)
@@ -282,8 +285,7 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
 
         # robot.set_joint_effort_target(torch.ones([1,n]).cuda(), joint_ids=gripper_ids)
         # # # robot.write_data_to_sim()
-        # robot.set_joint_position_target(robot.data.default_joint_pos)
-        # robot.set_joint_position_target(torch.zeros(1).cuda(), joint_ids=[1]) 
+
         # if count < 250 :
         #     # robot.set_joint_effort_target(torch.ones(1)*torque, joint_ids=[1])
         #     # object.write_nodal_pos_to_sim(object.data.default_nodal_state_w[0,:,:3])

@@ -118,22 +118,22 @@ UR10_ROBOTIQ_CFG = ArticulationCfg(
 
 DCLAW_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
-        usd_path=f"{WORK_DIR}/custom_assets/Robots/dclaw_ver2.usd",
+        usd_path=f"{WORK_DIR}/custom_assets/Robots/dclaw.usd",
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
-            disable_gravity=True,
+            disable_gravity=False,
             max_depenetration_velocity=5.0,
         ),
         activate_contact_sensors=False,
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         joint_pos={
-            "joint_f1_0": 0.0,
-            "joint_f2_0": 0.0,
-            "joint_f3_0": 0.0,
-            # "joint_f1_1": -0.0,
+            "joint1_1": 0.0,
+            # "joint_f2_0": 0.0,
+            # "joint_f3_0": 0.0,
+            "joint1_2": -0.,
             # "joint_f2_1": -0.0,
             # "joint_f3_1": -0.0,
-            # "joint_f1_2": 0.0,
+            "joint1_3": 0.0,
             # "joint_f2_2": 0.0,
             # "joint_f3_2": 0.0,
         },
@@ -143,11 +143,44 @@ DCLAW_CFG = ArticulationCfg(
             joint_names_expr=[".*"],
             velocity_limit=1000.0,
             effort_limit=100.0,
-            stiffness=800.0,
-            damping=40.0,
+            stiffness=0.0,
+            damping=0.0,
         ),
     },
 )
 
+
+# DCLAW_CFG = ArticulationCfg(
+#     spawn=sim_utils.UsdFileCfg(
+#         usd_path=f"{WORK_DIR}/custom_assets/Robots/dual_arm.usd",
+#         rigid_props=sim_utils.RigidBodyPropertiesCfg(
+#             disable_gravity=True,
+#             max_depenetration_velocity=5.0,
+#         ),
+#         activate_contact_sensors=False,
+#     ),
+#     init_state=ArticulationCfg.InitialStateCfg(
+#         joint_pos={
+#             "Revolute_12": 0.0,
+#             # "joint_f2_0": 0.0,
+#             # "joint_f3_0": 0.0,
+#             "Revolute_13": -0.0,
+#             # "joint_f2_1": -0.0,
+#             # "joint_f3_1": -0.0,
+#             # "joint_f1_2": 0.0,
+#             # "joint_f2_2": 0.0,
+#             # "joint_f3_2": 0.0,
+#         },
+#     ),
+#     actuators={
+#         "gripper": ImplicitActuatorCfg(
+#             joint_names_expr=[".*"],
+#             velocity_limit=1000.0,
+#             effort_limit=100.0,
+#             stiffness=0.0,
+#             damping=0.0,
+#         ),
+#     },
+# )
 
 """Configuration of UR-10 arm using implicit actuator models."""

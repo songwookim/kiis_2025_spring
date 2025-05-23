@@ -121,14 +121,14 @@ class EventCfg:
     """Configuration for events."""
 
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
-    # reset_all = EventTerm(
-    #     func=mdp.reset_deformable_object_properties, 
-    #     mode="reset"
-    #     params={
-    #         "young_modulus": [1.5e6, 9e3],,
-    #         "asset_cfg": SceneEntityCfg("object"),
-    #         }
-    #     )
+    reset_def_prop = EventTerm(
+        func=mdp.reset_deformable_object_properties, 
+        mode="reset",
+        params={
+            "young_modulus": [1.5e6, 9e3],
+            "asset_cfg": SceneEntityCfg("object"),
+            }
+        )
     
     
     # reset_object_position = EventTerm(

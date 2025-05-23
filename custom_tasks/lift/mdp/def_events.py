@@ -63,7 +63,7 @@ def reset_scene_to_default(env: ManagerBasedEnv, env_ids: torch.Tensor):
         nodal_state = deformable_object.data.default_nodal_state_w[env_ids].clone()
         deformable_object.write_nodal_state_to_sim(nodal_state, env_ids=env_ids)
 
-def reset_deformable_object_(
+def reset_deformable_object_properties(
     env: ManagerBasedEnv,
 env_ids: torch.Tensor,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("object"),
@@ -74,6 +74,11 @@ env_ids: torch.Tensor,
     # obtain default and set into the physics simulation
     nodal_state = asset.data.default_nodal_state_w[env_ids].clone()
     asset.write_nodal_state_to_sim(nodal_state, env_ids=env_ids)
+    
+    # write position
+    # asset.root_physx_view.get_element_stresses()
+    asset.material_physx_view.set_youngs_modulus(1.0)
+    
     
     
 def reset_nodal_state_uniform(

@@ -18,7 +18,7 @@ parser = argparse.ArgumentParser(description="Random agent for Isaac Lab environ
 parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )
-parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
+parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -59,21 +59,21 @@ def main():
     # reset environment
     env.reset()
     # simulate environment
-    t1 = 0.04
-    t2 = 0.02
+    # t1 = 0.04
+    # t2 = 0.02
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
             # sample actions from -1 to 1
             actions = 2 * torch.rand(env.action_space.shape, device=env.unwrapped.device) - 1
-            actions[...,:6] = 0.0
-            # env.env.scene._articulations["robot"].data.joint_pos_target[...,8] = t2
-            # env.env.scene._articulations["robot"].data.joint_pos_target[...,7] = t1
-            # apply actions     
-            env.env.scene._articulations["robot"].data.joint_effort_target[...,7] = -t1
-            env.env.scene._articulations["robot"].data.joint_effort_target[...,8] = -t2 
-            actions[...,6] = t1
-            actions[...,7] = t2
+            # actions[...,:6] = 0.0
+            # # env.env.scene._articulations["robot"].data.joint_pos_target[...,8] = t2
+            # # env.env.scene._articulations["robot"].data.joint_pos_target[...,7] = t1
+            # # apply actions     
+            # env.env.scene._articulations["robot"].data.joint_effort_target[...,7] = -t1
+            # env.env.scene._articulations["robot"].data.joint_effort_target[...,8] = -t2 
+            # actions[...,6] = t1
+            # actions[...,7] = t2
             print(env.env.scene._articulations["robot"].data.joint_pos[...,7:9])
             env.step(actions)
 

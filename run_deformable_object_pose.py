@@ -127,6 +127,12 @@ def average_quaternions_batched(quats: torch.Tensor) -> torch.Tensor:
             out[i] = q_sum / norm_val
 
     return out
+
+
+import omni
+from pxr import Usd, UsdGeom, Gf
+
+
 # ----------------------------------------------------------------
 # 4) 메인 시뮬레이션 루프
 # ----------------------------------------------------------------
@@ -143,6 +149,14 @@ def run_simulator(sim: SimulationContext, entities: dict, origins: torch.Tensor,
     # nodal kinematic target(초기화 용)
     nodal_kinematic_target = cube_object.data.nodal_kinematic_target.clone()
 
+
+    stage = omni.usd.get_context().get_stage()
+    # result, path = omni.kit.commands.execute("CreateMeshPrimCommand", prim_type="Cone")
+    # Get the prim
+    prim = stage.GetPrimAtPath("/World/Origin0/Cube")
+    # Get the size
+    bbox_cache = UsdGeom.BBoxCache(Usd.TimeCode.Default(), includedPurposes=[UsdGeom.Tokens.default_])
+    bbox_cache.Clear()
     while simulation_app.is_running():
         # 일정 주기마다 리셋
         if count % 250 == 0:
@@ -182,6 +196,12 @@ def run_simulator(sim: SimulationContext, entities: dict, origins: torch.Tensor,
         # deformable 객체 내부 버퍼 업데이트
         cube_object.update(sim_dt)
 
+
+        prim_bbox = bbox_cache.ComputeWorldBound(prim)
+        prim_range = prim_bbox.ComputeAlignedRange()
+        prim_size = prim_range.GetSize()
+        print(prim_bbox.GetVolume())
+    
         # ---------------------------
         # (중요) 여기서 pos, quat 값을 받아 마커 시각화
         # ---------------------------
